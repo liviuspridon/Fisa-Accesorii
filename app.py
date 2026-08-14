@@ -13,6 +13,7 @@ st.set_page_config(
 )
 
 st.title("📋 Generare Fișă Accesorii")
+st.error("TEST VERSIUNE NOUA APP.PY")
 st.write("Încarcă proforma PDF și generează automat fișa de accesorii în format Excel.")
 
 pdf_file = st.file_uploader(
