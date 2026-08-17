@@ -3,103 +3,127 @@ import pdfplumber
 
 
 def extract_proforma(pdf_path):
-    """
-    Extrage din proforma PDF:
-    - Nr. intern
-    - Data livrare
-    - linia liber-text de proiect
-    - lista de accesorii: denumire + cantitate
-    """
-
     with pdfplumber.open(pdf_path) as pdf:
-        text = "\n".join(
-            page.extract_text()
-            for page in pdf.pages
-            if page.extract_text()
-        )
+        page_texts = [page.extract_text() or "" for page in pdf.pages]
 
-    lines = text.split("\n")
+    full_text = "\n".join(page_texts)
 
-    # --- Header fields ---
     nr_intern = None
     data_livrare = None
-
-    m = re.search(r"Nr\.\s*intern\s+(\d+)", text)
+    m = re.search(r"Nr\.\s*intern\s+(\d+)", full_text)
     if m:
         nr_intern = m.group(1)
-
-    m = re.search(r"Data livrare\s+(\d{2}/\d{2}/\d{4})", text)
+    m = re.search(r"Data livrare\s+(\d{2}/\d{2}/\d{4})", full_text)
     if m:
         data_livrare = m.group(1)
 
-    # --- Linia libera de proiect ---
-    # Apare intre "Acest document contine..." si "Taxabila"
     proiect = None
-
+    lines = full_text.splitlines()
     for i, line in enumerate(lines):
-        if line.strip().startswith("Acest document contine"):
-            if i + 1 < len(lines):
-                candidate = lines[i + 1].strip()
-                if candidate and not candidate.lower().startswith("taxabila"):
-                    proiect = candidate
-            break
+        if line.strip().startswith("Acest document contine") and i + 1 < len(lines):
+            candidate = lines[i + 1].strip()
+            if candidate:
+                proiect = candidate
+                break
 
-    # --- Linii de produs ---
     item_start_re = re.compile(r"^(\d+)\s+(.*)$")
-
     trailing_re = re.compile(
-        r"^(?P<desc>.*?)\s+"
-        r"(?P<um>Buc|SET|Set|Kg|buc\.|ml)\s+"
-        r"(?P<cant>[\d.]+)\s+"
-        r"[\d.]+\s+"
-        r"[\d.]+\s+"
-        r"\d+%\s+"
-        r"[\d.]+\s*$"
+        r"^(?P<desc>.*?)\s+(?P<um>Buc|buc\.|SET|Set|Kg|ML|ml)\s+"
+        r"(?P<cant>[\d.,]+)\s+[\d.,]+\s+[\d.,]+\s+\d+%\s+[\d.,]+\s*$"
     )
 
+    def is_header(line):
+        s = line.strip()
+        patterns = [
+            r"^F\s*A\s*C\s*T\s*U\s*R\s*A$",
+            r"^P\s*R\s*O\s*F\s*O\s*R\s*M\s*A\b",
+            r"^Data\s*\(", r"^Nr\.\s*intern\b", r"^Furnizor\b",
+            r"^Cumparator\b", r"^CIF/CUI\b", r"^Nr\.\s*Reg\.\s*Com\.",
+            r"^Sediul\b", r"^Loc\./Jud\.", r"^Contul\b", r"^Banca\b",
+            r"^Punct lucru\b", r"^Agent\b", r"^Pag\.\s*\d+\s*/\s*\d+",
+            r"^Nr\.$", r"^crt\.$", r"^Denumirea produselor\b",
+            r"^sau a serviciilor$", r"^U\.?M\.?$", r"^Cant$",
+            r"^Pretul unitar$", r"^\(fara TVA\)$", r"^Valoarea$",
+            r"^TVA$", r"^%$", r"^Semnatura\b", r"^stampila\b",
+            r"^furnizorului\b", r"^Date privind expeditia\b",
+            r"^Semnatura de\b", r"^primire\b", r"^Numele delegatului\b",
+            r"^Total de plata\b", r"^C\.I\.\s*Seria\b",
+            r"^Mijlocul de transport\b", r"^Expedierea s-a efectuat\b",
+            r"^Exemplar:\b", r"^Emis cu Neomanager\b", r"^Taxabila cf\."
+        ]
+        return any(re.search(p, s, re.I) for p in patterns)
+
     items = []
-    current = None
-    in_table = False
 
-    for line in lines:
-        if re.search(r"crt\.\s*sau a serviciilor", line):
-            in_table = True
-            continue
+    # Each page is parsed independently. No fixed product number is used.
+    for page_text in page_texts:
+        page_lines = page_text.splitlines()
+        current = None
+        in_table = False
 
-        if line.strip().startswith("Acest document contine"):
-            in_table = False
+        for raw in page_lines:
+            line = raw.strip()
+            if not line:
+                continue
+
+            if re.search(r"Denumirea produselor", line, re.I):
+                in_table = True
+                continue
+            if in_table and (
+                line.lower() in {"sau a serviciilor", "u.m.", "um", "cant", "valoarea", "tva", "%"}
+                or re.search(r"Pretul unitar|fara TVA", line, re.I)
+            ):
+                continue
+
+            if line.startswith("Taxabila cf.") or line.startswith("Acest document contine"):
+                if current:
+                    items.append(current)
+                    current = None
+                in_table = False
+                continue
+
+            if is_header(line):
+                continue
+
+            m = item_start_re.match(line)
+            if m:
+                crt = int(m.group(1))
+                rest = m.group(2)
+                full = trailing_re.match(rest)
+                if current:
+                    items.append(current)
+                    current = None
+                if full:
+                    current = {
+                        "crt": crt,
+                        "denumire": full.group("desc").strip(),
+                        "um": full.group("um"),
+                        "cantitate": float(full.group("cant").replace(",", ".")),
+                    }
+                else:
+                    current = {"crt": crt, "denumire": rest, "um": None, "cantitate": None}
+                in_table = True
+                continue
+
             if current:
-                items.append(current)
-                current = None
-            continue
+                end = re.search(
+                    r"\s+(Buc|buc\.|SET|Set|Kg|ML|ml)\s+([\d.,]+)\s+[\d.,]+\s+[\d.,]+\s+\d+%\s+[\d.,]+\s*$",
+                    line,
+                )
+                if end:
+                    desc = line[:end.start()].strip()
+                    if desc:
+                        current["denumire"] += " " + desc
+                    current["um"] = end.group(1)
+                    current["cantitate"] = float(end.group(2).replace(",", "."))
+                elif not is_header(line):
+                    current["denumire"] += " " + line
 
-        if not in_table:
-            continue
+        if current:
+            items.append(current)
 
-        m_item = item_start_re.match(line)
-
-        if m_item and trailing_re.match(m_item.group(2)):
-            if current:
-                items.append(current)
-
-            crt = m_item.group(1)
-            rest = m_item.group(2)
-            mt = trailing_re.match(rest)
-
-            current = {
-                "crt": int(crt),
-                "denumire": mt.group("desc").strip(),
-                "um": mt.group("um"),
-                "cantitate": float(mt.group("cant")),
-            }
-
-        else:
-            # Linie de continuare a descrierii
-            if current and line.strip():
-                current["denumire"] += " " + line.strip()
-
-    if current:
-        items.append(current)
+    # Only completed product rows are returned.
+    items = [x for x in items if x["cantitate"] is not None]
 
     return {
         "nr_intern": nr_intern,
@@ -107,17 +131,3 @@ def extract_proforma(pdf_path):
         "proiect": proiect,
         "items": items,
     }
-
-
-if __name__ == "__main__":
-    import json
-    import sys
-
-    pdf_path = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "FP_260800280.pdf"
-    )
-
-    data = extract_proforma(pdf_path)
-    print(json.dumps(data, indent=2, ensure_ascii=False))
