@@ -116,6 +116,7 @@ def build_fisa(
 
     elif n_items < n_template_rows:
         rows_to_delete = n_template_rows - n_items
+
         ws.delete_rows(
             FIRST_DATA_ROW + n_items,
             rows_to_delete,
@@ -127,38 +128,55 @@ def build_fisa(
     # Footer-ul original folosește C:E unite pe două rânduri.
     ws.merge_cells(f"C{footer_row_1}:E{footer_row_2}")
 
-    # --- Header ---
+    # ---------------------------------------------------------
+    # HEADER
+    # ---------------------------------------------------------
+
+    # A3:B3 = titlu
     ws["A3"] = titlu
 
-    if isinstance(data, datetime.datetime):
-        ws["C3"] = data
-    elif isinstance(data, datetime.date):
-        ws["C3"] = data
-    elif data:
-        try:
-            ws["C3"] = datetime.datetime.strptime(
-                str(data),
-                "%d/%m/%Y",
-            )
-        except ValueError:
-            ws["C3"] = data
-    else:
-        ws["C3"] = None
+    # C3:E3 = DATA
+    #
+    # NU SCRIEM NIMIC AICI.
+    # Câmpul rămâne gol exact cum este în template.
 
+    # A4:B4 = proiect
     ws["A4"] = proiect
+
+    # C4:E4 = nr. document
     ws["C4"] = nr_document
 
-    # --- Rânduri articole ---
+    # ---------------------------------------------------------
+    # RÂNDURI ARTICOLE
+    # ---------------------------------------------------------
+
     for i, item in enumerate(items):
         r = FIRST_DATA_ROW + i
 
-        ws.cell(row=r, column=1, value=i + 1)
-        ws.cell(row=r, column=2, value=item["denumire"])
-        ws.cell(row=r, column=3, value=item["cantitate"])
+        ws.cell(
+            row=r,
+            column=1,
+            value=i + 1,
+        )
+
+        ws.cell(
+            row=r,
+            column=2,
+            value=item["denumire"],
+        )
+
+        ws.cell(
+            row=r,
+            column=3,
+            value=item["cantitate"],
+        )
 
         # D = Conf și E = Dif rămân libere.
 
-    # --- Footer ---
+    # ---------------------------------------------------------
+    # FOOTER
+    # ---------------------------------------------------------
+
     if fisa_de is None:
         footer_1 = "Fisa Accesorii :   "
     else:
@@ -169,16 +187,53 @@ def build_fisa(
     else:
         footer_2 = f"Depozit       :        {depozit}"
 
-    ws.cell(row=footer_row_1, column=1, value=footer_1)
-    ws.cell(row=footer_row_1, column=3, value=datetime.date.today())
-    ws.cell(row=footer_row_2, column=1, value=footer_2)
+    ws.cell(
+        row=footer_row_1,
+        column=1,
+        value=footer_1,
+    )
 
-    # Elimină eventualele rânduri rămase după footer.
+    # Data din FOOTER rămâne neschimbată.
+    ws.cell(
+        row=footer_row_1,
+        column=3,
+        value=datetime.date.today(),
+    )
+
+    ws.cell(
+        row=footer_row_2,
+        column=1,
+        value=footer_2,
+    )
+
+    # ---------------------------------------------------------
+    # PRINT
+    # ---------------------------------------------------------
+
+    # Zona de print include și rândurile adăugate, dacă există.
+    ws.print_area = f"A1:E{footer_row_2}"
+
+    # O singură pagină pe lățime, oricâte pagini pe verticală.
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+
+    # Repetă antetul pe fiecare pagină.
+    ws.print_title_rows = "1:5"
+
+    # ---------------------------------------------------------
+    # ELIMINĂ RÂNDURILE DE DUPĂ FOOTER
+    # ---------------------------------------------------------
+
     if ws.max_row > footer_row_2:
         ws.delete_rows(
             footer_row_2 + 1,
             ws.max_row - footer_row_2,
         )
+
+    # ---------------------------------------------------------
+    # SALVARE
+    # ---------------------------------------------------------
 
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
