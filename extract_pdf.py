@@ -280,9 +280,7 @@ def extract_proforma(pdf_path):
                         "crt": crt,
                         "denumire": m_full.group("desc").strip(),
                         "um": m_full.group("um"),
-                        "cantitate": float(
-                            m_full.group("cant").replace(",", ".")
-                        ),
+                        "cantitate": float(m_full.group("cant").replace(",", "")),
                     }
 
                     in_table = True
