@@ -173,22 +173,24 @@ def build_fisa(
         alignment.vertical = "center"
         cell.alignment = alignment
 
-               # Păstrează formatarea și activează încadrarea textului
-        cell = ws.cell(
-            row=r,
-            column=2,
-            value=item["denumire"],
-        )
+        # Ajustează înălțimea în funcție de numărul estimat de rânduri
+        text = str(item["denumire"] or "")
+        col_width = ws.column_dimensions["B"].width or 30
+        chars_per_line = max(1, int(col_width * 1.1))
 
-        alignment = copy.copy(cell.alignment)
-        alignment.wrap_text = True
-        cell.alignment = alignment
+        lines = 0
+        for part in text.split("\n"):
+            lines += max(
+                1,
+                (len(part) + chars_per_line - 1) // chars_per_line,
+            )
 
-        ws.cell(
-            row=r,
-            column=3,
-            value=item["cantitate"],
-        )
+        if lines >= 3:
+            ws.row_dimensions[r].height = 45
+        elif lines == 2:
+            ws.row_dimensions[r].height = 30
+        else:
+            ws.row_dimensions[r].height = 15
 
         # D = Conf și E = Dif rămân libere.
 
