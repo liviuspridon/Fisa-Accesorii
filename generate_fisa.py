@@ -146,12 +146,12 @@ def build_fisa(
     # C4:E4 = nr. document
     ws["C4"] = nr_document
 
+   
     # ---------------------------------------------------------
     # RÂNDURI ARTICOLE
     # ---------------------------------------------------------
 
-    
-       for i, item in enumerate(items):
+    for i, item in enumerate(items):
         r = FIRST_DATA_ROW + i
 
         # Numărul articolului
@@ -164,7 +164,7 @@ def build_fisa(
         alignment.wrap_text = True
         cell.alignment = alignment
 
-        # Înălțimea rândului
+        # Înălțimea rândului: 15, 30 sau 45
         text = str(item["denumire"] or "")
         col_width = ws.column_dimensions["B"].width or 30
         chars_per_line = max(1, int(col_width * 1.1))
@@ -186,7 +186,8 @@ def build_fisa(
         # Cantitatea
         ws.cell(row=r, column=3, value=item["cantitate"])
 
-        # Coloanele D și E rămân libere.
+        # Coloanele D și E rămân libere pentru completare manuală.
+
 
     # ---------------------------------------------------------
     # FOOTER
