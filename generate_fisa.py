@@ -150,6 +150,7 @@ def build_fisa(
     # RÂNDURI ARTICOLE
     # ---------------------------------------------------------
 
+    
     for i, item in enumerate(items):
         r = FIRST_DATA_ROW + i
 
@@ -159,11 +160,32 @@ def build_fisa(
             value=i + 1,
         )
 
-        ws.cell(
+        # Denumirea articolului
+        cell = ws.cell(
             row=r,
             column=2,
             value=item["denumire"],
         )
+
+        # Permite afișarea textului pe mai multe rânduri
+        alignment = copy.copy(cell.alignment)
+        alignment.wrap_text = True
+        alignment.vertical = "center"
+        cell.alignment = alignment
+
+        # Ajustează aproximativ înălțimea rândului
+        text = str(item["denumire"] or "")
+        col_width = ws.column_dimensions["B"].width or 30
+        chars_per_line = max(1, int(col_width * 1.1))
+
+        lines = 0
+        for part in text.split("\n"):
+            lines += max(
+                1,
+                (len(part) + chars_per_line - 1) // chars_per_line,
+            )
+
+        ws.row_dimensions[r].height = max(15, lines * 15)
 
         ws.cell(
             row=r,
@@ -172,6 +194,7 @@ def build_fisa(
         )
 
         # D = Conf și E = Dif rămân libere.
+
 
     # ---------------------------------------------------------
     # FOOTER
